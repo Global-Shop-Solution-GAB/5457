@@ -1,0 +1,4 @@
+CREATE TABLE "GCG_5457_Batch" (
+ "AutoNum" IDENTITY DEFAULT '0' CONSTRAINT "UK_AutoNum" UNIQUE USING 0,
+ "BatchPrefix" CHAR(1),
+ "BatchNum" INTEGER );
