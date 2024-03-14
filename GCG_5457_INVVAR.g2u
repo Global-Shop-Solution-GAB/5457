@@ -1,0 +1,40 @@
+﻿Program.Sub.Preflight.Start
+Program.Sub.Preflight.End
+
+Program.Sub.Main.Start
+v.Local.sRet.Declare
+v.Local.bExist.declare
+
+
+'invoice accrual acceptance load page populate hook check. This needs a modified version of 5457 to work.
+
+f.Intrinsic.Control.if(v.Caller.Hook,=,33510)
+	f.ODBC.Connection!con.Opencompanyconnection
+	f.ODBC.Connection!con.TableExists("GCG_5457_Maint",v.Local.bExists)
+	
+	f.Intrinsic.Control.If(v.Local.bExists.Not)
+		f.ODBC.Connection!con.Close
+		f.Intrinsic.Control.End
+	f.Intrinsic.Control.EndIf
+	
+	f.ODBC.Connection!conx.ExecuteAndReturn("Select Top 1 OptionValue from GCG_5457_Maint where OptionName = 'InvVarAccount'",v.Local.sRet)
+	f.Intrinsic.Control.If(v.Local.sRet.Trim,<>,"")
+		v.Passed.000043.Set(v.Local.sRet)
+	f.Intrinsic.Control.EndIf
+	
+	f.ODBC.Connection!con.Close
+	
+	f.Intrinsic.Control.End
+	
+	
+
+f.Intrinsic.Control.EndIf
+
+
+
+Program.Sub.Main.End
+
+Program.Sub.Comments.Start
+${$5$}$3.0.0.0$}$1
+${$6$}$adsouza$}$20201120160159028$}$JX3L09Cgehg7O+lKYSb2ur8FFsJUp9u/P35nEizjnsRl13vDAcZrLZcKhjmqCOLy2dnxFjyZf+A=
+Program.Sub.Comments.End
