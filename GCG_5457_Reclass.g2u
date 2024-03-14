@@ -1,0 +1,708 @@
+Program.Sub.ScreenSU.Start
+Gui.Form..Create
+Gui.Form..Caption("Exchange Variance Reallocation")
+Gui.Form..Size(22185,10695)
+Gui.Form..MinX(0)
+Gui.Form..MinY(0)
+Gui.Form..Position(0,0)
+Gui.Form..BackColor(-2147483633)
+Gui.Form..MousePointer(0)
+Gui.Form..Event(UnLoad,Form_UnLoad)
+Gui.Form.txtExchangeVarAcct.Create(TextBox,"",True,1155,300,0,2325,120,False,0,"Arial",8,-2147483643,2)
+Gui.Form.lbl1.Create(Label,"Exchange Variance Account",True,2220,255,0,60,225,True,0,"Arial",8,-2147483633,0)
+Gui.Form.lbl2.Create(Label,"Gains Account",True,1200,255,0,3690,210,True,0,"Arial",8,-2147483633,0)
+Gui.Form.lbl3.Create(Label,"Losses Account",True,1290,255,0,6285,225,True,0,"Arial",8,-2147483633,0)
+Gui.Form.txtGainsAcct.Create(TextBox,"",True,1215,300,0,4905,120,False,0,"Arial",8,-2147483643,2)
+Gui.Form.txtLossesAcct.Create(TextBox,"",True,1215,300,0,7650,120,False,0,"Arial",8,-2147483643,2)
+Gui.Form.lbl4.Create(Label,"Batch Number Prefix",True,1635,255,0,9135,210,True,0,"Arial",8,-2147483633,0)
+Gui.Form.txtBatchPrefix.Create(TextBox,"",True,255,300,0,10815,120,False,0,"Arial",8,-2147483643,2)
+Gui.Form.cmdBatchNum.Create(Button)
+Gui.Form.cmdBatchNum.Size(1065,375)
+Gui.Form.cmdBatchNum.Position(11385,90)
+Gui.Form.cmdBatchNum.Caption("Batch Num")
+Gui.Form.cmdBatchNum.Event(Click,cmdBatchNum_Click)
+Gui.Form.cmdBatchNum.Visible(False)
+Gui.Form.txtBatchNum.Create(TextBox,"",False,645,300,0,12540,120,True,0,"Arial",8,-2147483643,1)
+Gui.Form.dtpStart.Create(DatePicker)
+Gui.Form.dtpStart.Size(1935,285)
+Gui.Form.dtpStart.Position(135,855)
+Gui.Form.lbl5.Create(Label,"Start",True,645,255,0,105,615,True,0,"Arial",8,-2147483633,0)
+Gui.Form.lbl6.Create(Label,"End",True,480,255,0,2295,600,True,0,"Arial",8,-2147483633,0)
+Gui.Form.dtpEnd.Create(DatePicker)
+Gui.Form.dtpEnd.Size(1935,285)
+Gui.Form.dtpEnd.Position(2265,840)
+Gui.Form.gsRetrieve.Create(GsGridControl)
+Gui.Form.gsRetrieve.Size(12405,8250)
+Gui.Form.gsRetrieve.Position(75,1770)
+Gui.Form.cmdRetrieve.Create(Button)
+Gui.Form.cmdRetrieve.Size(2445,375)
+Gui.Form.cmdRetrieve.Position(120,1305)
+Gui.Form.cmdRetrieve.Caption("Retrieve Exchange Variance")
+Gui.Form.cmdRetrieve.Event(Click,cmdRetrieve_Click)
+Gui.Form.cmdGenerateReAllocBatch.Create(Button)
+Gui.Form.cmdGenerateReAllocBatch.Size(2640,375)
+Gui.Form.cmdGenerateReAllocBatch.Position(2895,1305)
+Gui.Form.cmdGenerateReAllocBatch.Caption("Generate ReAllocation Batch")
+Gui.Form.cmdGenerateReAllocBatch.Event(Click,cmdGenerateReAllocBatch_Click)
+Gui.Form.gsWaitBatch.Create(GsGridControl)
+Gui.Form.gsWaitBatch.Size(9300,8205)
+Gui.Form.gsWaitBatch.Position(12585,1770)
+Gui.Form.gsWaitBatch.Event(RowCellClick,gsWaitBatch_RowCellClick)
+Gui.Form.cmdGetPendingBatch.Create(Button)
+Gui.Form.cmdGetPendingBatch.Size(2640,375)
+Gui.Form.cmdGetPendingBatch.Position(12570,1305)
+Gui.Form.cmdGetPendingBatch.Caption("Get Pending ReAllocaton Batch")
+Gui.Form.cmdGetPendingBatch.Event(Click,cmdGetPendingBatch_Click)
+Program.Sub.ScreenSU.End
+
+Program.Sub.Preflight.Start
+Program.Sub.Preflight.End
+
+Program.Sub.Main.Start
+'BN, Feb 2019
+'Specs: Re-allocates all the dollars that posted in GL Account A (Exchange Variance) during a specific period and then re-post the Debit (positive values) to Account C and the Credit (negative values) to Account B.
+'Ensure that there are three exchange accounts set up in Global Shop
+'A ? Main Exchange account where all the exchange entries are posted
+'B ? One Account for Exchange Gains
+'C ? One Account for Exchange Losses
+'To setup account A:	
+'	a.	System Support > Administration > Standard > Inventory Accounting Options > Purchasing Tab > Exchange variance account
+'	b.	System Support > Administration > Standard > General Ledger 
+'	c.	System Support > Administration > Standard > Accounts Receivable Table Maintenance > Exchange Variance
+'	
+'This program will pull records for Account A in GL_Detail
+'User can generate a batch number for a date range (within a month). The records will be marked ~ (Waiting for ReAllocating)
+'User can delete a batch number which rolls back the to its original Reference value(not really because only 4 chars of Original Reference is back)
+'User can post the batch number at a later date.
+'What the batch will do is to Credit to Gains account, Debit to Losses account, and based on the balance, we Credit/Debit the Exchange Variance Account.
+'If the batch is posted, it will be removed from the pending grid on the right, and records for that batch in the A account will be marked ^ (ReAllocated)
+
+'The accounts are maintained in the maintenance program GCG_5457_Maintain.g2u
+
+f.Intrinsic.Control.Try
+	v.Local.sError.Declare
+	v.Local.bInSecurityGroup.Declare
+
+	
+	'User has to be in the security group XCHGEVAR to run the program
+	f.Global.Security.IsInGroup(v.Caller.User,"XCHGEVAR",V.Caller.CompanyCode,V.Local.bInSecurityGroup)
+	'For testing purpose
+	'v.Local.bInSecurityGroup.Set(True)
+	F.Intrinsic.Control.If(V.Local.bInSecurityGroup.Not)
+		F.Intrinsic.UI.Msgbox("You are not allowed to use this program","Attention")
+		f.Intrinsic.Control.CallSub("Unload")
+	F.Intrinsic.Control.EndIf
+			
+	f.ODBC.Connection!conx.OpenCompanyConnection
+	F.Intrinsic.Control.CallSub("Get_Options")
+	
+	'For testing purpose
+'	gui.Form.dtpStart.Value("2017-04-01")
+'	gui.Form.dtpEnd.Value("2017-04-30")
+	Gui.Form..Show	
+
+F.Intrinsic.Control.Catch
+	F.Intrinsic.String.Build("Project: {0}{1}Subroutine: {2}{1}Subroutine called from:{6}{1}Error Occurred: {3}{1}Description: {4}{1}GAB Version: {5}",V.Ambient.ScriptPath,V.Ambient.Newline,V.Ambient.CurrentSubroutine,V.Ambient.ErrorNumber,V.Ambient.ErrorDescription,V.Ambient.GABVersion,v.Ambient.SubroutineCalledFrom,V.Local.sError)
+	F.Intrinsic.UI.Msgbox(V.Local.sError)
+	f.Intrinsic.Control.CallSub("Unload")
+F.Intrinsic.Control.EndTry
+Program.Sub.Main.End
+
+Program.Sub.UnLoad.Start
+f.Intrinsic.Control.Try
+	v.Local.sError.Declare
+
+	F.Intrinsic.Control.If(V.ODBC.conx.State,=,1)
+		F.ODBC.Connection!conx.close
+	F.Intrinsic.Control.EndIf
+	
+	f.Intrinsic.Control.End
+
+F.Intrinsic.Control.Catch
+	F.Intrinsic.String.Build("Project: {0}{1}Subroutine: {2}{1}Subroutine called from:{6}{1}Error Occurred: {3}{1}Description: {4}{1}GAB Version: {5}",V.Ambient.ScriptPath,V.Ambient.Newline,V.Ambient.CurrentSubroutine,V.Ambient.ErrorNumber,V.Ambient.ErrorDescription,V.Ambient.GABVersion,v.Ambient.SubroutineCalledFrom,V.Local.sError)
+	F.Intrinsic.UI.Msgbox(V.Local.sError)
+	F.Intrinsic.Control.End	
+F.Intrinsic.Control.EndTry
+Program.Sub.UnLoad.End
+
+Program.Sub.Form_UnLoad.Start
+f.Intrinsic.Control.CallSub	("Unload")
+Program.Sub.Form_UnLoad.End
+
+Program.Sub.Get_Options.Start
+f.Intrinsic.Control.Try
+	v.Local.sError.Declare
+	v.Local.sRet.Declare
+	
+	'ExchangeVarAcct
+	f.ODBC.Connection!conx.ExecuteAndReturn("Select OptionValue from GCG_5457_Maint where OptionName = 'ExchangeVarAccount'",v.Local.sRet)
+	f.Intrinsic.Control.CallSub("Validate_Account","sGLNumber",v.Local.sRet)
+	f.Intrinsic.Control.If(v.Args.bExist.Not)
+		f.Intrinsic.UI.Msgbox("Exchange Account is not valid. Please run the Exchange Variance Maintenance program.","Attention")
+		f.Intrinsic.Control.CallSub("Unload")
+	f.Intrinsic.Control.EndIf
+	gui.Form.txtExchangeVarAcct.Text(v.Local.sRet.Trim)
+	'GainsAcct
+	f.ODBC.Connection!conx.ExecuteAndReturn("Select OptionValue from GCG_5457_Maint where OptionName = 'GainsAccount'",v.Local.sRet)
+	f.Intrinsic.Control.CallSub("Validate_Account","sGLNumber",v.Local.sRet)
+	f.Intrinsic.Control.If(v.Args.bExist.Not)
+		f.Intrinsic.UI.Msgbox("Gains Account is not valid. Please run the Exchange Variance Maintenance program.","Attention")
+		f.Intrinsic.Control.CallSub("Unload")
+	f.Intrinsic.Control.EndIf
+	gui.Form.txtGainsAcct.Text(v.Local.sRet.Trim)
+	'LossesAcct
+	f.ODBC.Connection!conx.ExecuteAndReturn("Select OptionValue from GCG_5457_Maint where OptionName = 'LossesAccount'",v.Local.sRet)
+	f.Intrinsic.Control.CallSub("Validate_Account","sGLNumber",v.Local.sRet)
+	f.Intrinsic.Control.If(v.Args.bExist.Not)
+		f.Intrinsic.UI.Msgbox("Losses Account is not valid. Please run the Exchange Variance Maintenance program.","Attention")
+		f.Intrinsic.Control.CallSub("Unload")
+	f.Intrinsic.Control.EndIf
+	gui.Form.txtLossesAcct.Text(v.Local.sRet.Trim)
+	'BatchNumberPrefix
+	f.ODBC.Connection!conx.ExecuteAndReturn("Select OptionValue from GCG_5457_Maint where OptionName = 'BatchNumberPrefix'",v.Local.sRet)
+	gui.Form.txtBatchPrefix.Text(v.Local.sRet.Trim)
+	
+F.Intrinsic.Control.Catch
+	F.Intrinsic.String.Build("Project: {0}{1}Current Subroutine: {2}{1}Subroutine Called From: {3}{1}Error Occurred {4}{1}Error description: {5}{1}GAB Version: {6}",V.Ambient.ScriptPath,V.Ambient.Newline,V.Ambient.CurrentSubroutine,v.Ambient.SubroutineCalledFrom,V.Ambient.ErrorNumber,V.Ambient.ErrorDescription,V.Ambient.GABVersion,V.Local.sError)
+	F.Intrinsic.UI.Msgbox(V.Local.sError)
+	f.Intrinsic.Control.CallSub("Unload")
+F.Intrinsic.Control.EndTry	
+Program.Sub.Get_Options.End
+
+Program.Sub.Validate_Account.Start
+'Check if account is valid
+f.Intrinsic.Control.Try
+	v.Local.sError.Declare
+	v.Local.sRet.Declare
+	v.Local.sSQL.Declare
+	v.Local.bExist.Declare
+	
+	'Pass a GL account to verify if it is valid
+	f.Intrinsic.String.Build("Select * from GL_Master where GL_Account = '{0}'",v.Args.sGLNumber,v.Local.sSQL)
+	f.ODBC.Connection!conx.ExecuteAndReturn(v.Local.sSQL,v.Local.sRet)
+	f.Intrinsic.Control.If(v.Local.sRet,=,"")
+		v.Local.bExist.Set(False)
+	f.Intrinsic.Control.Else
+		v.Local.bExist.Set(True)
+	f.Intrinsic.Control.EndIf
+	f.Intrinsic.Variable.AddRV("bExist",v.Local.bExist)
+	
+F.Intrinsic.Control.Catch
+	F.Intrinsic.String.Build("Project: {0}{1}Current Subroutine: {2}{1}Subroutine Called From: {3}{1}Error Occurred {4}{1}Error description: {5}{1}GAB Version: {6}",V.Ambient.ScriptPath,V.Ambient.Newline,V.Ambient.CurrentSubroutine,v.Ambient.SubroutineCalledFrom,V.Ambient.ErrorNumber,V.Ambient.ErrorDescription,V.Ambient.GABVersion,V.Local.sError)
+	F.Intrinsic.UI.Msgbox(V.Local.sError)
+	f.Intrinsic.Control.CallSub("Unload")
+F.Intrinsic.Control.EndTry	
+Program.Sub.Validate_Account.End
+
+Program.Sub.Get_Current_and_Generate_Next_Batch_Num.Start
+'Get the batch to be used, and generate another batch to be saved to DB for next time to be used
+f.Intrinsic.Control.Try
+	v.Local.sError.Declare
+	v.Local.sSQL.Declare
+	v.Local.iBatch.Declare
+	v.Local.sBatchNumToBeUsed.Declare
+	v.Local.sHold.Declare
+	
+	'Get Current Batch Number to be used and insert Next Batch Number to GCG_5457_Maint
+	f.Intrinsic.Control.If(v.DataTable.BatchNum.Exists)
+		f.Data.DataTable.Close("BatchNum")
+	f.Intrinsic.Control.EndIf
+	f.Intrinsic.String.Build("select Top 1 BatchPrefix,BatchNum from GCG_5457_Batch where BatchPrefix = '{0}' order by autonum desc,BatchNum desc ",v.Screen.Form!txtBatchPrefix.Text,v.Local.sSQL)
+	f.Data.DataTable.CreateFromSQL("BatchNum","conx",v.Local.sSQL,True)
+	f.Intrinsic.Control.If(v.DataTable.BatchNum.RowCount,=,0)
+		'Initialize
+		f.Intrinsic.String.Build("Insert into GCG_5457_Batch (BatchPrefix,BatchNum) values ('{0}',1)",v.Screen.Form!txtBatchPrefix.text,v.Local.sSQL)
+		f.ODBC.Connection!conx.Execute(v.Local.sSQL)
+		f.Intrinsic.String.Build("Insert into GCG_5457_Batch (BatchPrefix,BatchNum) values ('{0}',2)",v.Screen.Form!txtBatchPrefix.text,v.Local.sSQL)
+		f.ODBC.Connection!conx.Execute(v.Local.sSQL)
+		f.Intrinsic.String.Build("{0}0001",v.Screen.Form!txtBatchPrefix.Text,v.Local.sBatchNumToBeUsed)
+	f.Intrinsic.Control.Else
+		f.Intrinsic.String.LPad(v.DataTable.BatchNum(0).BatchNum!FieldValString,"0",4,v.Local.sHold)
+		f.Intrinsic.String.Build("{0}{1}",v.DataTable.BatchNum(0).BatchPrefix!FieldValString,v.Local.sHold,v.Local.sBatchNumToBeUsed)
+		v.Local.iBatch.Set(v.DataTable.BatchNum(0).BatchNum!FieldValString)
+		f.Intrinsic.Math.Add(v.Local.iBatch,1,v.Local.iBatch)
+		f.Intrinsic.String.Build("Insert into GCG_5457_Batch (BatchPrefix,BatchNum) values ('{0}',{1})",v.Screen.Form!txtBatchPrefix.text,v.Local.iBatch,v.Local.sSQL)
+		f.ODBC.Connection!conx.Execute(v.Local.sSQL)
+	f.Intrinsic.Control.EndIf
+	
+	f.Intrinsic.Control.If(v.Local.iBatch,>,10000)
+		'That means the current v.local.sBatchedNumTobeUsed = X10000 which is not valid (where X is the prefix letter)
+		f.Intrinsic.UI.Msgbox("Please run Gain/Losses Reclassification Maintenance program to assign new Prefix Letter. The batch number with current Prefix Letter has passed 9999.")
+		v.Local.sBatchNumToBeUsed.Set("")	
+	f.Intrinsic.Control.EndIf
+	
+	f.Intrinsic.Variable.AddRV("sCurrentBatchNum",v.Local.sBatchNumToBeUsed)
+	
+F.Intrinsic.Control.Catch
+	F.Intrinsic.String.Build("Project: {0}{1}Current Subroutine: {2}{1}Subroutine Called From: {3}{1}Error Occurred {4}{1}Error description: {5}{1}GAB Version: {6}",V.Ambient.ScriptPath,V.Ambient.Newline,V.Ambient.CurrentSubroutine,v.Ambient.SubroutineCalledFrom,V.Ambient.ErrorNumber,V.Ambient.ErrorDescription,V.Ambient.GABVersion,V.Local.sError)
+	F.Intrinsic.UI.Msgbox(V.Local.sError)
+	f.Intrinsic.Control.CallSub("Unload")
+F.Intrinsic.Control.EndTry	
+Program.Sub.Get_Current_and_Generate_Next_Batch_Num.End
+
+Program.Sub.cmdRetrieve_Click.Start
+f.Intrinsic.Control.Try
+	v.Local.sError.Declare
+	v.Local.dStart.Declare
+	v.Local.dEnd.Declare
+	v.Local.sSQL.Declare
+	'Date range must be within a month
+	f.Intrinsic.Control.CallSub("Validate_Date_Range")	
+	f.Intrinsic.Control.If(v.Args.bValidDateRange,=,False)
+		f.Intrinsic.Control.ExitSub
+	f.Intrinsic.Control.EndIf
+	
+	v.Local.dStart.Set(v.Screen.Form!dtpStart.Value)
+	v.Local.dEnd.Set(v.Screen.Form!dtpEnd.Value)
+	'Bind Retrieve
+	f.Intrinsic.Control.If(v.DataTable.Ret.Exists)
+		f.Data.DataTable.Close("Ret")
+	f.Intrinsic.Control.EndIf
+	
+	f.Intrinsic.String.Build("Select GL_NUMBER,DATEFROMPARTS(Left(POST_DATE,4),SUBSTRING(POST_DATE,5,2),Right(POST_DATE,2)) as POSTDATE,Batch,Line,Seq,Reference,Description,Case When DB_CR_Flag = '1' then AMOUNT_CMPNY When DB_CR_Flag = '0' then Convert(0,SQL_Float) End  as Credit,Case When DB_CR_Flag = '0' then AMOUNT_CMPNY When DB_CR_Flag = '1' then Convert(0,SQL_Float) End  as Debit from GL_Detail where GL_Number = '{0}' and PostDate between '{1}' and '{2}'  Order by Post_Date asc ",v.Screen.Form!txtExchangeVarAcct.Text,v.Local.dStart.PervasiveDate,v.Local.dEnd.PervasiveDate,v.Local.sSQL)
+	f.Data.DataTable.CreateFromSQL("Ret","conx",v.Local.sSQL,True)
+	
+	'Create gridview and format Retrieve grid
+	gui.Form.gsRetrieve.AddGridviewFromDatatable("GVRet","Ret")
+	
+	gui.Form.gsRetrieve.SuspendLayout()
+	Gui.Form.gsRetrieve.SetGridViewProperty("GVRet","AllowSort",True)
+	Gui.Form.gsRetrieve.SetGridViewProperty("GVRet","AllowFilter",True)
+	Gui.Form.gsRetrieve.SetGridViewProperty("GVRet","OptionsFindAlwaysVisible",True)
+	Gui.Form.gsRetrieve.SetGridViewProperty("GVRet","OptionsViewShowAutoFilterRow",True)
+	Gui.Form.gsRetrieve.SetGridViewProperty("GVRet","AllowColumnResizing",True)
+	Gui.Form.gsRetrieve.SetGridViewProperty("GVRet","AllowColumnResizing",True)
+	Gui.Form.gsRetrieve.SetGridViewProperty("GVRet","OptionsViewColumnAutoWidth",False)	
+
+	Gui.Form.gsRetrieve.SetColumnProperty("GVRet","PostDate","Width","68")
+	Gui.Form.gsRetrieve.SetColumnProperty("GVRet","BATCH","Width","45")
+	Gui.Form.gsRetrieve.SetColumnProperty("GVRet","Line","Width","35")	
+	Gui.Form.gsRetrieve.SetColumnProperty("GVRet","Seq","Width","35")
+	Gui.Form.gsRetrieve.SetColumnProperty("GVRet","Reference","Width","180")
+	Gui.Form.gsRetrieve.SetColumnProperty("GVRet","Description","Width","300")
+	Gui.Form.gsRetrieve.SetColumnProperty("GVRet","Credit","Width","110")
+	Gui.Form.gsRetrieve.SetColumnProperty("GVRet","Debit","Width","110")
+	
+	gui.Form.gsRetrieve.SetColumnProperty("GVRet","GL_NUMBER","Caption","GL")
+	gui.Form.gsRetrieve.SetColumnProperty("GVRet","POSTDATE","Caption","Post Date")	
+	gui.Form.gsRetrieve.SetColumnProperty("GVRet","BATCH","Caption","Batch")	
+	gui.Form.gsRetrieve.SetColumnProperty("GVRet","LINE","Caption","Line")	
+	gui.Form.gsRetrieve.SetColumnProperty("GVRet","SEQ","Caption","Seq")	
+	gui.Form.gsRetrieve.SetColumnProperty("GVRet","REFERENCE","Caption","Reference")	
+	
+	Gui.Form.gsRetrieve.SetColumnProperty("GVRet","Debit","DisplayCustomNumeric","###,###,###,##0.00")
+	Gui.Form.gsRetrieve.SetColumnProperty("GVRet","Credit","DisplayCustomNumeric","###,###,###,##0.00")
+	
+
+	gui.Form.gsRetrieve.SetColumnProperty("GVRet","PostDate","DisplayCustomDatetime","d")
+	gui.Form.gsRetrieve.AddSummaryItem("GVRet","Debit","Sum1","Sum","","","n")
+	gui.Form.gsRetrieve.AddSummaryItem("GVRet","Credit","Sum2","Sum","","","n")
+	gui.Form.gsRetrieve.ResumeLayout()
+	
+	gui.Form.gsRetrieve.MainView("GVRet")
+
+F.Intrinsic.Control.Catch
+	F.Intrinsic.String.Build("Project: {0}{1}Current Subroutine: {2}{1}Subroutine Called From: {3}{1}Error Occurred {4}{1}Error description: {5}{1}GAB Version: {6}",V.Ambient.ScriptPath,V.Ambient.Newline,V.Ambient.CurrentSubroutine,v.Ambient.SubroutineCalledFrom,V.Ambient.ErrorNumber,V.Ambient.ErrorDescription,V.Ambient.GABVersion,V.Local.sError)
+	F.Intrinsic.UI.Msgbox(V.Local.sError)
+	f.Intrinsic.Control.CallSub("Unload")
+F.Intrinsic.Control.EndTry	
+Program.Sub.cmdRetrieve_Click.End
+
+Program.Sub.Validate_Date_Range.Start
+'Date range must be within a month
+f.Intrinsic.Control.Try
+	v.Local.sError.Declare
+	v.Local.dStart.Declare
+	v.Local.dEnd.Declare
+	v.Local.iStartYear.Declare
+	v.Local.iEndYear.Declare
+	v.Local.iStartMonth.Declare
+	v.Local.iEndMonth.Declare
+	v.Local.bValid.Declare
+	
+	v.Local.dStart.Set(v.Screen.Form!dtpStart.Value)
+	v.Local.dEnd.Set(v.Screen.Form!dtpEnd.Value)
+	
+	f.Intrinsic.Date.Year(v.Local.dStart,v.Local.iStartYear)
+	f.Intrinsic.Date.Year(v.Local.dEnd,v.Local.iEndYear)
+	f.Intrinsic.Date.Month(v.Local.dStart,v.Local.iStartMonth)
+	f.Intrinsic.Date.Month(v.Local.dEnd,v.Local.iEndMonth)
+	
+	f.Intrinsic.Control.If(v.Local.iStartYear,<>,v.Local.iEndYear,or,v.Local.iStartMonth,<>,v.Local.iEndMonth)
+		f.Intrinsic.UI.Msgbox("Date range is only within one month","Invalid Date Range")
+		v.Local.bValid.Set(False)
+	f.Intrinsic.Control.Else
+		v.Local.bValid.Set(True)
+	f.Intrinsic.Control.EndIf	
+	f.Intrinsic.Variable.AddRV("bValidDateRange",v.Local.bValid)	
+	
+F.Intrinsic.Control.Catch
+	F.Intrinsic.String.Build("Project: {0}{1}Current Subroutine: {2}{1}Subroutine Called From: {3}{1}Error Occurred {4}{1}Error description: {5}{1}GAB Version: {6}",V.Ambient.ScriptPath,V.Ambient.Newline,V.Ambient.CurrentSubroutine,v.Ambient.SubroutineCalledFrom,V.Ambient.ErrorNumber,V.Ambient.ErrorDescription,V.Ambient.GABVersion,V.Local.sError)
+	F.Intrinsic.UI.Msgbox(V.Local.sError)
+	f.Intrinsic.Control.CallSub("Unload")
+F.Intrinsic.Control.EndTry	
+Program.Sub.Validate_Date_Range.End
+
+Program.Sub.cmdGenerateReAllocBatch_Click.Start
+f.Intrinsic.Control.Try
+	v.Local.sError.Declare
+	v.Local.iCnt.Declare
+	v.Local.sNewRef.Declare
+	v.Local.dPostDate.Declare
+	v.Local.sPosdate.Declare
+	v.Local.sSQL.Declare
+	v.Local.fGains.Declare
+	v.Local.fLosses.Declare
+	v.Local.fReallocate.Declare	
+	v.Local.dDateToPost.Declare
+	v.Local.sDateToPost.Declare
+	v.Local.sDateStart.Declare
+	v.Local.sNewDescr.Declare
+	
+	'Before generate, Retrieve records
+	f.Intrinsic.Control.CallSub("cmdRetrieve_click")
+	f.Data.DataView.Create("Ret","RetDV",22,"Reference not like '~*' and Reference not like '^*'","")
+	f.Intrinsic.Control.If(v.DataView.Ret!RetDV.RowCount,=,0)
+		f.Intrinsic.UI.Msgbox("No records found")
+		f.Intrinsic.Control.ExitSub
+	f.Intrinsic.Control.EndIf
+	
+	'Get Batch number
+	f.Intrinsic.Control.CallSub("Get_Current_and_Generate_Next_Batch_Num")
+	f.Intrinsic.Control.If(v.Args.sCurrentBatchNum.Trim,=,"")
+		'No valid Batch Number
+		f.Intrinsic.Control.ExitSub
+	f.Intrinsic.Control.EndIf
+	
+	f.Intrinsic.Control.For(v.Local.iCnt,0,v.DataView.Ret!RetDV.RowCount--,1)
+		f.Intrinsic.String.Build("~{0}",v.DataView.Ret!RetDV(v.Local.iCnt).Reference!FieldValTrim,v.Local.sNewRef)
+		f.Intrinsic.String.Build("{0}_{1}",v.args.sCurrentBatchNum,v.DataView.Ret!RetDV(v.Local.iCnt).Description!FieldValTrim,v.local.sNewDescr)
+		v.Local.dPostDate.Set(v.DataView.Ret!RetDV(v.Local.iCnt).PostDate!FieldValString)
+		f.Intrinsic.String.Format(v.Local.dPostDate,"YYYYMMDD",v.Local.sPosdate)
+		f.Intrinsic.String.Build("Update GL_Detail set Reference = '{0}',Description = '{6}' Where GL_Number = '{1}' and Post_Date = '{2}' and Batch = '{3}' and Line = '{4}' and Seq = '{5}'",v.Local.sNewRef.left15,v.DataView.Ret!RetDV(v.Local.iCnt).GL_Number!FieldValString,v.Local.sPosdate,v.DataView.Ret!RetDV(v.Local.iCnt).Batch!FieldValString,v.DataView.Ret!RetDV(v.Local.iCnt).Line!FieldValString,v.DataView.Ret!RetDV(v.Local.iCnt).Seq!FieldValString,v.Local.sNewDescr.left30,v.Local.sSQL)
+		f.ODBC.Connection!conx.Execute(v.Local.sSQL)
+		'Calculate total Gains and total Losses		
+		f.Intrinsic.Math.Add(v.Local.fGains,v.DataView.Ret!RetDV(v.Local.iCnt).Credit!FieldValString,v.Local.fGains)
+		f.Intrinsic.Math.Add(v.Local.fLosses,v.DataView.Ret!RetDV(v.Local.iCnt).Debit!FieldValString,v.Local.fLosses)
+	f.Intrinsic.Control.Next(v.Local.iCnt)
+	'Calculate ReAllocateAmount			
+	f.Intrinsic.Math.Add(v.Local.fGains,v.Local.fLosses,v.Local.fReallocate)	
+		
+	'Format DateToPost/DateStart/DateEnd. The DateToPost is the end of the date range
+	v.Local.dDateToPost.Set(v.Screen.Form!dtpEnd.Value)	
+	f.Intrinsic.String.Format(v.Local.dDateToPost,"YYYY-MM-DD",v.Local.sDateToPost)
+	f.Intrinsic.String.Format(v.Screen.Form!dtpStart.Value,"YYYY-MM-DD",v.Local.sDateStart)
+	
+	'Insert a record of pending Batch to custom table GCG_5457_Waiting
+	f.Intrinsic.String.Build("Insert into GCG_5457_Waiting (Batch,DateToPost,DateStart,DateEnd,Gains,Losses,ReallocateAmount) values('{0}','{1}','{2}','{3}',{4},{5},{6})",v.Args.sCurrentBatchNum,v.Local.sDateToPost,v.Local.sDateStart,v.Local.sDateToPost,v.Local.fGains,v.Local.fLosses,v.Local.fReallocate,v.Local.sSQL)
+	f.ODBC.Connection!conx.Execute(v.Local.sSQL)
+	
+	'Refresh the screen to get new information
+	f.Intrinsic.Control.CallSub("cmdRetrieve_click")
+	f.Intrinsic.Control.CallSub("cmdGetPendingBatch_Click")
+	
+F.Intrinsic.Control.Catch
+	F.Intrinsic.String.Build("Project: {0}{1}Current Subroutine: {2}{1}Subroutine Called From: {3}{1}Error Occurred {4}{1}Error description: {5}{1}GAB Version: {6}",V.Ambient.ScriptPath,V.Ambient.Newline,V.Ambient.CurrentSubroutine,v.Ambient.SubroutineCalledFrom,V.Ambient.ErrorNumber,V.Ambient.ErrorDescription,V.Ambient.GABVersion,V.Local.sError)
+	F.Intrinsic.UI.Msgbox(V.Local.sError)
+	f.Intrinsic.Control.CallSub("Unload")
+F.Intrinsic.Control.EndTry		
+Program.Sub.cmdGenerateReAllocBatch_Click.End
+
+Program.Sub.Bind_Waiting_Batch.Start
+f.Intrinsic.Control.Try
+	v.Local.sError.Declare
+	
+	'Pulll pending Batch to be posted and bind to the gsWaitBatch
+	f.Intrinsic.Control.If(v.DataTable.WaitBatch.Exists)
+		f.Data.DataTable.Close("WaitBatch")
+	f.Intrinsic.Control.EndIf
+	f.Data.DataTable.CreateFromSQL("WaitBatch","conx","Select Batch,DateToPost,DateStart,DateEnd,Gains,Losses,ReAllocateAmount from GCG_5457_Waiting order by Batch,DateToPost",True)
+	f.Data.DataTable.AddColumn("WaitBatch","Delete","String","Delete")
+	f.Data.DataTable.AddColumn("WaitBatch","Post","String","Post")
+	f.Data.DataTable.AddExpressionColumn("WaitBatch","ReAlloc","Float","0 - [ReAllocateAmount]")
+	
+	'Add gridview and format gsWaitBatch
+	gui.Form.gsWaitBatch.AddGridviewFromDatatable("GVWait","WaitBatch")
+	
+	gui.Form.gsWaitBatch.SuspendLayout()
+	Gui.Form.gsWaitBatch.SetGridViewProperty("GVWait","AllowSort",True)
+	Gui.Form.gsWaitBatch.SetGridViewProperty("GVWait","AllowFilter",True)
+	Gui.Form.gsWaitBatch.SetGridViewProperty("GVWait","OptionsFindAlwaysVisible",True)
+	Gui.Form.gsWaitBatch.SetGridViewProperty("GVWait","OptionsViewShowAutoFilterRow",True)
+	Gui.Form.gsWaitBatch.SetGridViewProperty("GVWait","AllowColumnResizing",True)
+	Gui.Form.gsWaitBatch.SetGridViewProperty("GVWait","AllowColumnResizing",True)
+	Gui.Form.gsWaitBatch.SetGridViewProperty("GVWait","OptionsViewColumnAutoWidth",False)
+	
+	gui.Form.gsWaitBatch.SetColumnProperty("GVWait","DateToPost","Caption","Date to Post")
+	gui.Form.gsWaitBatch.SetColumnProperty("GVWait","DateStart","Caption","Start Date")
+	gui.Form.gsWaitBatch.SetColumnProperty("GVWait","DateEnd","Caption","End Date")
+	gui.Form.gsWaitBatch.SetColumnProperty("GVWait","ReAlloc","Caption","ReAllocation")
+	
+	gui.Form.gsWaitBatch.SetColumnProperty("GVWait","Delete","AllowEdit",False)
+	gui.Form.gsWaitBatch.SetColumnProperty("GVWait","Delete","ReadOnly",True)
+	gui.Form.gsWaitBatch.SetColumnProperty("GVWait","Post","AllowEdit",False)
+	gui.Form.gsWaitBatch.SetColumnProperty("GVWait","Post","ReadOnly",True)
+	
+	Gui.Form.gsWaitBatch.SetColumnProperty("GVWait","ReAlloc","VisibleIndex",6)
+	
+	Gui.Form.gsWaitBatch.SetColumnProperty("GVWait","DateToPost","Width","68")
+	Gui.Form.gsWaitBatch.SetColumnProperty("GVWait","DateStart","Width","68")
+	Gui.Form.gsWaitBatch.SetColumnProperty("GVWait","DateEnd","Width","68")
+	
+	Gui.Form.gsWaitBatch.SetColumnProperty("GVWait","Gains","Width","95")
+	Gui.Form.gsWaitBatch.SetColumnProperty("GVWait","Losses","Width","95")
+	Gui.Form.gsWaitBatch.SetColumnProperty("GVWait","ReAlloc","Width","95")
+	Gui.Form.gsWaitBatch.SetColumnProperty("GVWait","ReAllocateAmount","Width","95")
+	Gui.Form.gsWaitBatch.SetColumnProperty("GVWait","ReAllocateAmount","Visible",False)
+	
+	gui.Form.gsWaitBatch.ColumnEdit("GVWait","Delete","editorbutton","Delete")
+	gui.Form.gsWaitBatch.ColumnEdit("GVWait","Post","editorbutton","Post")
+	
+	
+	gui.Form.gsWaitBatch.SetColumnProperty("GVWait","DateToPost","DisplayCustomDatetime","d")
+	gui.Form.gsWaitBatch.SetColumnProperty("GVWait","DateStart","DisplayCustomDatetime","d")
+	gui.Form.gsWaitBatch.SetColumnProperty("GVWait","DateEnd","DisplayCustomDatetime","d")
+	
+	gui.Form.gsWaitBatch.AddSummaryItem("GVWait","Gains","Sum3","Sum","","","n")
+	gui.Form.gsWaitBatch.AddSummaryItem("GVWait","Losses","Sum4","Sum","","","n")
+	gui.Form.gsWaitBatch.AddSummaryItem("GVWait","ReAlloc","Sum5","Sum","","","n")
+	
+	gui.Form.gsWaitBatch.SetColumnProperty("GVWait","BATCH","Width","45")
+	gui.Form.gsWaitBatch.ResumeLayout()
+	
+	gui.Form.gsWaitBatch.MainView("GVWait")
+	
+	
+F.Intrinsic.Control.Catch
+	F.Intrinsic.String.Build("Project: {0}{1}Current Subroutine: {2}{1}Subroutine Called From: {3}{1}Error Occurred {4}{1}Error description: {5}{1}GAB Version: {6}",V.Ambient.ScriptPath,V.Ambient.Newline,V.Ambient.CurrentSubroutine,v.Ambient.SubroutineCalledFrom,V.Ambient.ErrorNumber,V.Ambient.ErrorDescription,V.Ambient.GABVersion,V.Local.sError)
+	F.Intrinsic.UI.Msgbox(V.Local.sError)
+	f.Intrinsic.Control.CallSub("Unload")
+F.Intrinsic.Control.EndTry	
+Program.Sub.Bind_Waiting_Batch.End
+
+Program.Sub.cmdGetPendingBatch_Click.Start
+f.Intrinsic.Control.CallSub("Bind_Waiting_Batch")
+Program.Sub.cmdGetPendingBatch_Click.End
+
+Program.Sub.gsWaitBatch_RowCellClick.Start
+f.Intrinsic.Control.Try
+	v.Local.sError.Declare
+	v.Local.sBatch.Declare
+	v.Local.dDateToPost.Declare
+	v.Local.sDateToPost.Declare
+	v.Local.sSQL.Declare
+	v.Local.fBalance.Declare
+	v.Local.fReAllocate.Declare
+	v.Local.fReAllocateSwitch.Declare
+	v.Local.fLosses.Declare
+	v.Local.fGains.Declare
+	v.Local.sGLDetailText.Declare
+	v.Local.sNewRef.Declare
+	v.Local.sHold.Declare
+	v.Local.sFile.Declare
+
+	'Format
+	v.Local.sBatch.Set(v.DataTable.WaitBatch(v.Args.RowIndex).Batch!FieldValString)
+	v.Local.dDateToPost.Set(v.DataTable.WaitBatch(v.Args.RowIndex).DateToPost!FieldValString)	
+	f.Intrinsic.String.Format(v.Local.dDateToPost,"YYYYMMDD",v.Local.sDateToPost)	
+	v.Local.fReAllocate.Set(v.DataTable.WaitBatch(v.Args.RowIndex).ReallocateAmount!FieldValString)
+	v.Local.fGains.Set(v.DataTable.WaitBatch(v.Args.RowIndex).Gains!FieldValString)
+	v.Local.fLosses.Set(v.DataTable.WaitBatch(v.Args.RowIndex).Losses!FieldValString)
+	
+	'Delete button is clicked
+	f.Intrinsic.Control.If(v.Args.Column,=,"Delete")
+		'Roll back the Reference
+		f.ODBC.Connection!conx.Execute("Update GL_Detail set Reference = right(Reference,14),Description = right(Description,24)  where left(Reference,1) = '~'")
+		'Delete pending batch in custom table GCG_5457_Waiting
+		f.Intrinsic.String.Build("Delete from GCG_5457_Waiting where Batch = '{0}'",v.Local.sBatch,v.Local.sSQL)
+		f.ODBC.Connection!conx.Execute(v.Local.sSQL)
+		'Delete records from the gsWaitingBatch grid
+		f.Data.DataTable.DeleteRow("WaitBatch",v.Args.RowIndex)	
+		'Refresh data
+		f.Intrinsic.Control.CallSub("cmdRetrieve_click")
+	f.Intrinsic.Control.EndIf
+	
+	'Post button is clicked
+	f.Intrinsic.Control.If(v.Args.Column,=,"Post")	
+	
+		f.Intrinsic.UI.InvokeWaitDialog("Processing")
+		f.Intrinsic.Control.If(v.Local.fReAllocate,=,0)
+			'Debit Losses			
+			f.Intrinsic.Control.Callsub(Generate_gl_detail_line,"GLAccount",v.Screen.Form!txtLossesAcct.Text,"Batch",v.Local.sBatch,"iGLBatchLine",1,"GLReference",v.Local.sBatch,"GLAmount",v.Local.fLosses,"GLDesc","Exchange ReAllocate","sGL_TransCode","17","sGL_Cust","","GLRecordLabel","DEBIT","sGL_InvoiceDate",v.local.sDateToPost,"sGL_InvoiceDueDate",v.local.sDateToPost,"sGL_CheckNumber",v.Local.sBatch,"sCheckDate",v.local.sDateToPost,"sCheckGrossAmount",v.Local.fLosses,"sCheckDiscountAmount","0","sCheckNetAmount",v.Local.fLosses)
+			F.Intrinsic.String.Build("{0}{1}{2}",V.Local.sGLDetailText,v.Args.sGL_Line_Generated,V.Ambient.NewLine,V.Local.sGLDetailText)		
+			'Credit Gains
+			f.Intrinsic.Control.Callsub(Generate_gl_detail_line,"GLAccount",v.Screen.Form!txtGainsAcct.text,"Batch",v.local.sBatch,"iGLBatchLine",2,"GLReference",v.Local.sBatch,"GLAmount",V.Local.fGains,"GLDesc","Exchange ReAllocate","sGL_TransCode","17","sGL_Cust","","GLRecordLabel","CREDIT","sGL_InvoiceDate",v.local.sDateToPost,"sGL_InvoiceDueDate",v.local.sDateToPost,"sGL_CheckNumber",v.Local.sBatch,"sCheckDate",v.local.sDateToPost,"sCheckGrossAmount",v.Local.fGains,"sCheckDiscountAmount","0","sCheckNetAmount",v.Local.fGains)	
+			F.Intrinsic.String.Build("{0}{1}{2}",V.Local.sGLDetailText,v.Args.sGL_Line_Generated,V.Ambient.NewLine,V.Local.sGLDetailText)			
+	
+		f.Intrinsic.Control.ElseIf(v.Local.fReAllocate,<,0)
+			f.Intrinsic.Math.Sub(0,v.Local.fReAllocate,v.Local.fReAllocateSwitch)
+			'Debit Exchange Variance Account
+			F.Intrinsic.String.Build("^{0}_RALC",v.Local.sBatch,v.Local.sNewRef)
+			f.Intrinsic.Control.Callsub(Generate_gl_detail_line,"GLAccount",v.Screen.Form!txtExchangeVarAcct.Text,"Batch",v.Local.sBatch,"iGLBatchLine",1,"GLReference",v.Local.sNewRef,"GLAmount",v.Local.fReAllocateSwitch,"GLDesc","Exchange ReAllocate","sGL_TransCode","17","sGL_Cust","","GLRecordLabel","DEBIT","sGL_InvoiceDate",v.local.sDateToPost,"sGL_InvoiceDueDate","","sGL_CheckNumber",v.Local.sBatch,"sCheckDate",v.local.sDateToPost,"sCheckGrossAmount",v.Local.fReAllocateSwitch,"sCheckDiscountAmount","0","sCheckNetAmount",v.Local.fReAllocateSwitch)
+			F.Intrinsic.String.Build("{0}{1}{2}",V.Local.sGLDetailText,v.Args.sGL_Line_Generated,V.Ambient.NewLine,V.Local.sGLDetailText)
+			
+			'Debit Losses			
+			f.Intrinsic.Control.Callsub(Generate_gl_detail_line,"GLAccount",v.Screen.Form!txtLossesAcct.Text,"Batch",v.Local.sBatch,"iGLBatchLine",2,"GLReference",v.Local.sBatch,"GLAmount",v.Local.fLosses,"GLDesc","Exchange ReAllocate","sGL_TransCode","17","sGL_Cust","","GLRecordLabel","DEBIT","sGL_InvoiceDate",v.local.sDateToPost,"sGL_InvoiceDueDate",v.local.sDateToPost,"sGL_CheckNumber",v.Local.sBatch,"sCheckDate",v.local.sDateToPost,"sCheckGrossAmount",v.Local.fLosses,"sCheckDiscountAmount","0","sCheckNetAmount",v.Local.fLosses)
+			F.Intrinsic.String.Build("{0}{1}{2}",V.Local.sGLDetailText,v.Args.sGL_Line_Generated,V.Ambient.NewLine,V.Local.sGLDetailText)		
+			'Credit Gains
+			f.Intrinsic.Control.Callsub(Generate_gl_detail_line,"GLAccount",v.Screen.Form!txtGainsAcct.text,"Batch",v.local.sBatch,"iGLBatchLine",3,"GLReference",v.Local.sBatch,"GLAmount",V.Local.fGains,"GLDesc","Exchange ReAllocate","sGL_TransCode","17","sGL_Cust","","GLRecordLabel","CREDIT","sGL_InvoiceDate",v.local.sDateToPost,"sGL_InvoiceDueDate",v.local.sDateToPost,"sGL_CheckNumber",v.Local.sBatch,"sCheckDate",v.local.sDateToPost,"sCheckGrossAmount",v.Local.fGains,"sCheckDiscountAmount","0","sCheckNetAmount",v.Local.fGains)	
+			F.Intrinsic.String.Build("{0}{1}{2}",V.Local.sGLDetailText,v.Args.sGL_Line_Generated,V.Ambient.NewLine,V.Local.sGLDetailText)	
+		f.Intrinsic.Control.Else
+			f.Intrinsic.Math.Sub(0,v.Local.fReAllocate,v.Local.fReAllocateSwitch)
+			'Credit Exchange Variance Account
+			F.Intrinsic.String.Build("^{0}_RALC",v.Local.sBatch,v.Local.sNewRef)
+			f.Intrinsic.Control.Callsub(Generate_gl_detail_line,"GLAccount",v.Screen.Form!txtExchangeVarAcct.Text,"Batch",v.Local.sBatch,"iGLBatchLine",1,"GLReference",v.Local.sNewRef,"GLAmount",v.Local.fReAllocateSwitch,"GLDesc","Exchange ReAllocate","sGL_TransCode","17","sGL_Cust","","GLRecordLabel","CREDIT","sGL_InvoiceDate",v.local.sDateToPost,"sGL_InvoiceDueDate","","sGL_CheckNumber",v.Local.sBatch,"sCheckDate",v.local.sDateToPost,"sCheckGrossAmount",v.Local.fReAllocateSwitch,"sCheckDiscountAmount","0","sCheckNetAmount",v.Local.fReAllocateSwitch)
+			F.Intrinsic.String.Build("{0}{1}{2}",V.Local.sGLDetailText,v.Args.sGL_Line_Generated,V.Ambient.NewLine,V.Local.sGLDetailText)	
+			
+			'Debit Losses			
+			f.Intrinsic.Control.Callsub(Generate_gl_detail_line,"GLAccount",v.Screen.Form!txtLossesAcct.Text,"Batch",v.Local.sBatch,"iGLBatchLine",2,"GLReference",v.Local.sBatch,"GLAmount",v.Local.fLosses,"GLDesc","Exchange ReAllocate","sGL_TransCode","17","sGL_Cust","","GLRecordLabel","DEBIT","sGL_InvoiceDate",v.local.sDateToPost,"sGL_InvoiceDueDate",v.local.sDateToPost,"sGL_CheckNumber",v.Local.sBatch,"sCheckDate",v.local.sDateToPost,"sCheckGrossAmount",v.Local.fLosses,"sCheckDiscountAmount","0","sCheckNetAmount",v.Local.fLosses)
+			F.Intrinsic.String.Build("{0}{1}{2}",V.Local.sGLDetailText,v.Args.sGL_Line_Generated,V.Ambient.NewLine,V.Local.sGLDetailText)		
+			'Credit Gains
+			f.Intrinsic.Control.Callsub(Generate_gl_detail_line,"GLAccount",v.Screen.Form!txtGainsAcct.text,"Batch",v.local.sBatch,"iGLBatchLine",3,"GLReference",v.Local.sBatch,"GLAmount",V.Local.fGains,"GLDesc","Exchange ReAllocate","sGL_TransCode","17","sGL_Cust","","GLRecordLabel","CREDIT","sGL_InvoiceDate",v.local.sDateToPost,"sGL_InvoiceDueDate",v.local.sDateToPost,"sGL_CheckNumber",v.Local.sBatch,"sCheckDate",v.local.sDateToPost,"sCheckGrossAmount",v.Local.fGains,"sCheckDiscountAmount","0","sCheckNetAmount",v.Local.fGains)	
+			F.Intrinsic.String.Build("{0}{1}{2}",V.Local.sGLDetailText,v.Args.sGL_Line_Generated,V.Ambient.NewLine,V.Local.sGLDetailText)	
+			
+		f.Intrinsic.Control.EndIf		
+		
+		'Save to text file for callwrapper
+		F.Intrinsic.String.Build("{0}\GLDETAIL.txt",V.Caller.FilesDir,V.Local.sFile)
+		F.Intrinsic.File.String2File(V.Local.sFile,V.Local.sGLDetailText)	
+		
+		'Call callwrapper
+		F.Global.General.CallWrapperSync(50,"UPLGDETL/C")
+		'Update new ref
+		f.Intrinsic.String.Build("Update GL_Detail set Reference = Replace(Reference,'~','^') where left(Reference,1) = '~' and left(Description,6) = '{0}_'",v.Local.sBatch,v.Local.sSQL)
+		f.ODBC.Connection!conx.Execute(v.Local.sSQL)
+		
+		'Update GL_Batch_Log
+		f.Intrinsic.String.Build("Insert into GL_Batch_Log values ('{0}','{1}','{1}');", v.local.sBatch,v.Local.sDateToPost.right6,v.Local.sSQL)
+		f.ODBC.Connection!conx.Execute(v.Local.sSQL)
+		
+		'Update fields that callwrapper does not handle
+		f.Intrinsic.String.Format(v.Local.dDateToPost,"YYYY-MM-DD",v.Local.sDateToPost)
+		f.Intrinsic.String.Build("Update GL_Detail set Period = (select Period from V_GL_Calendar where Beg_date <= '{0}' and End_date >= '{0}') where Batch = '{1}'",v.Local.sDateToPost,v.Local.sBatch,v.Local.sSQL)
+		f.ODBC.Connection!conx.Execute(v.Local.sSQL)
+		f.Intrinsic.String.Build("Update GL_Detail g set Period_Beg_Date_SQL = (select Top 1 DATEFROMPARTS(Left(Beg_Date,4),SUBSTRING(Beg_Date,5,2),Right(Beg_Date,2)) as Beg_Date from GL_Calendar c where Convert(g.Period,SQL_float) = Convert(c.Period,SQL_float) AND START_Year = left(g.Post_Date,4)) where Batch = '{0}'",v.Local.sBatch,v.Local.sSQL)
+		f.ODBC.Connection!conx.Execute(v.Local.sSQL)
+		f.Intrinsic.String.Build("Update GL_Detail g set Period_End_Date_SQL = (select Top 1 DATEFROMPARTS(Left(End_Date,4),SUBSTRING(End_Date,5,2),Right(End_Date,2)) as End_Date from GL_Calendar c where Convert(g.Period,SQL_float) = Convert(c.Period,SQL_float) AND START_Year = left(g.Post_Date,4)) where Batch = '{0}'",v.Local.sBatch,v.Local.sSQL)
+		f.ODBC.Connection!conx.Execute(v.Local.sSQL)			
+	
+	
+		'Delete Waiting Batch
+		f.Intrinsic.String.Build("Delete from GCG_5457_Waiting where Batch = '{0}'",v.Local.sBatch,v.Local.sSQL)
+		f.ODBC.Connection!conx.Execute(v.Local.sSQL)
+		f.Data.DataTable.DeleteRow("WaitBatch",v.Args.RowIndex)	
+		f.Intrinsic.String.Build("Batch {0} has been posted successfully",v.Local.sBatch,v.Local.sHold)
+		f.Intrinsic.UI.Msgbox(v.Local.sHold)
+		
+		'Refresh
+		f.Intrinsic.Control.CallSub("cmdRetrieve_click")		
+		
+		f.Intrinsic.UI.CloseWaitDialog		
+		
+	f.Intrinsic.Control.EndIf
+	
+	
+F.Intrinsic.Control.Catch
+	F.Intrinsic.String.Build("Project: {0}{1}Current Subroutine: {2}{1}Subroutine Called From: {3}{1}Error Occurred {4}{1}Error description: {5}{1}GAB Version: {6}",V.Ambient.ScriptPath,V.Ambient.Newline,V.Ambient.CurrentSubroutine,v.Ambient.SubroutineCalledFrom,V.Ambient.ErrorNumber,V.Ambient.ErrorDescription,V.Ambient.GABVersion,V.Local.sError)
+	F.Intrinsic.UI.Msgbox(V.Local.sError)
+	f.Intrinsic.Control.CallSub("Unload")
+F.Intrinsic.Control.EndTry	
+Program.Sub.gsWaitBatch_RowCellClick.End
+
+Program.Sub.Generate_GL_Detail_Line.Start
+f.Intrinsic.Control.Try
+	v.Local..BulkDeclareString(sGLDTLine, sHold, sError)
+	
+	'GL Account 1-15
+	F.Intrinsic.String.RPad(v.Args.GLAccount," ",15,V.Local.sGLDTLine)
+	
+''	'Post Date 16-23
+'	F.Intrinsic.String.Format(v.Ambient.Date,"YYYYMMDD",V.Local.sHold)
+	F.Intrinsic.String.Concat(V.Local.sGLDTLine,V.Args.sGL_InvoiceDate,V.Local.sGLDTLine)
+'	
+'	Transction Batch Number 24-28
+	f.Intrinsic.String.RPad(v.Args.Batch," ",5, v.Local.sHold)
+	F.Intrinsic.String.Concat(V.Local.sGLDTLine,v.Local.sHold,V.Local.sGLDTLine)
+'			
+	'Batch line	29-33	
+	f.Intrinsic.String.LPad(v.Args.iGLBatchLine,"0",5,v.Local.sHold)
+	F.Intrinsic.String.Concat(V.Local.sGLDTLine,v.Local.sHold,V.Local.sGLDTLine)
+
+'	Vouncher Number 34-40
+	
+'	'Reference 41-55
+	F.Intrinsic.String.RPad(V.Local.sGLDTLine," ",40,V.Local.sGLDTLine)
+	f.Intrinsic.String.RPad(v.Args.GLReference," ",15, v.Local.sHold)
+	F.Intrinsic.String.Concat(V.Local.sGLDTLine,v.Local.sHold,V.Local.sGLDTLine)	
+'	
+'	'Amount 56-71
+	F.Intrinsic.String.Format(v.Args.GLAmount,"0.00",V.Local.sHold)
+	f.Intrinsic.String.LPad(v.Local.sHold," ",16,v.Local.sHold)
+	F.Intrinsic.String.Concat(V.Local.sGLDTLine,v.Local.sHold,V.Local.sGLDTLine)
+'	
+	'Description 72-101 will be customer name
+	F.Intrinsic.String.RPad(V.Args.GLDesc," ",30,V.Local.sHold)
+	F.Intrinsic.String.Concat(V.Local.sGLDTLine,v.Local.sHold,V.Local.sGLDTLine)
+	
+	'Appliation Type 102-103	
+	F.Intrinsic.String.Concat(V.Local.sGLDTLine,"GL",V.Local.sGLDTLine)
+
+'	'Transaction Type 104-105
+	F.Intrinsic.String.Concat(V.Local.sGLDTLine,v.Args.sGL_TransCode,V.Local.sGLDTLine)
+'	
+'	'Customer ID 106-112
+	f.Intrinsic.String.RPad(v.Args.sGL_Cust," ",7,v.Local.sHold)
+	F.Intrinsic.String.Concat(V.Local.sGLDTLine,v.Local.sHold,V.Local.sGLDTLine)
+	
+'	127-141 15
+	F.Intrinsic.String.RPad(V.Local.sGLDTLine," ",126,V.Local.sGLDTLine)
+	f.Intrinsic.String.RPad(v.Args.GLRecordLabel," ",15,v.Local.sHold)
+	F.Intrinsic.String.Concat(V.Local.sGLDTLine,V.Local.sHold,V.Local.sGLDTLine)
+'	
+'	Invoice Date CCYYMMDD 142-149 8
+	F.Intrinsic.String.Concat(V.Local.sGLDTLine,V.Args.sGL_InvoiceDate,V.Local.sGLDTLine)
+	
+'	Invoice Due Date CCYYMMDD 150-157 8
+	F.Intrinsic.String.Concat(V.Local.sGLDTLine,V.Args.sGL_InvoiceDueDate,V.Local.sGLDTLine)
+	
+'	Check System 158-159 2
+'	Required only if Application Type = CK, must be AP or AR.  Otherwise, optional: Upload will determine using the Application Type.
+	F.Intrinsic.String.RPad(V.Local.sGLDTLine," ",157,V.Local.sGLDTLine)
+	F.Intrinsic.String.Concat(V.Local.sGLDTLine,"GL",V.Local.sGLDTLine)
+
+'	Check Number 160-165
+	f.Intrinsic.String.RPad(v.Args.sGL_CheckNumber," ",6,v.Local.sHold)
+	F.Intrinsic.String.Concat(V.Local.sGLDTLine,v.Local.sHold,V.Local.sGLDTLine)
+
+	'CheckDate 166-173
+	F.Intrinsic.String.Concat(V.Local.sGLDTLine,"20",v.Args.sCheckDate,V.Local.sGLDTLine)
+	
+'	'Check GrossAmout	174-189 16 +-14.2
+'	F.Intrinsic.String.Format(v.Args.sCheckGrossAmount,"0.00",V.Local.sHold)
+'	f.Intrinsic.String.LPad(v.Local.sHold," ",16,v.Local.sHold)
+'	F.Intrinsic.String.Concat(V.Local.sGLDTLine,v.Local.sHold,V.Local.sGLDTLine)
+'	
+'	'Check DiscountAmout	190-200 16 +-14.2
+'	F.Intrinsic.String.Format(v.Args.sCheckDiscountAmount,"0.00",V.Local.sHold)
+'	f.Intrinsic.String.LPad(v.Local.sHold," ",16,v.Local.sHold)
+'	F.Intrinsic.String.Concat(V.Local.sGLDTLine,v.Local.sHold,V.Local.sGLDTLine)
+'	
+'	'Check NetAmout	201-217 16 +-14.2
+'	F.Intrinsic.String.Format(v.Args.sCheckNetAmount,"0.00",V.Local.sHold)
+'	f.Intrinsic.String.LPad(v.Local.sHold," ",16,v.Local.sHold)
+'	F.Intrinsic.String.Concat(V.Local.sGLDTLine,v.Local.sHold,V.Local.sGLDTLine)	
+	
+Function.Intrinsic.Variable.AddRV("sGL_Line_Generated",V.Local.sGLDTLine)
+	
+F.Intrinsic.Control.Catch
+	F.Intrinsic.String.Build("Project: {0}{1}Current Subroutine: {2}{1}Subroutine Called From: {3}{1}Error Occurred {4}{1}Error description: {5}{1}GAB Version: {6}",V.Ambient.ScriptPath,V.Ambient.Newline,V.Ambient.CurrentSubroutine,v.Ambient.SubroutineCalledFrom,V.Ambient.ErrorNumber,V.Ambient.ErrorDescription,V.Ambient.GABVersion,V.Local.sError)
+	F.Intrinsic.UI.Msgbox(V.Local.sError)
+	f.Intrinsic.Control.CallSub("Unload")
+F.Intrinsic.Control.EndTry	
+Program.Sub.Generate_GL_Detail_Line.End
+
+Program.Sub.cmdBatchNum_Click.Start
+'This sub is for testing purpose only, not in production
+f.Intrinsic.Control.CallSub("Get_Current_and_Generate_Next_Batch_Num")
+gui.Form.txtBatchNum.Text(v.Args.sCurrentBatchNum)
+Program.Sub.cmdBatchNum_Click.End
