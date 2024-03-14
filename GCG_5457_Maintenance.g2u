@@ -1,0 +1,292 @@
+Program.Sub.ScreenSU.Start
+Gui.Form..Create
+Gui.Form..Caption("Gains/Losses Reclassification Maintenance")
+Gui.Form..Size(10125,2205)
+Gui.Form..MinX(0)
+Gui.Form..MinY(0)
+Gui.Form..Position(0,0)
+Gui.Form..BackColor(-2147483633)
+Gui.Form..MousePointer(0)
+Gui.Form..Event(UnLoad,Form_UnLoad)
+Gui.Form.lbl1.Create(Label,"Exchange Variance Account",True,2205,255,0,135,180,True,0,"Arial",8,-2147483633,0)
+Gui.Form.txtExchangeVarAcct.Create(TextBox,"",True,2100,300,0,135,465,True,0,"Arial",8,-2147483643,2)
+Gui.Form.txtExchangeVarAcct.MaxLength(15)
+Gui.Form.txtExchangeVarAcct.TabStop(True)
+Gui.Form.txtExchangeVarAcct.TabIndex(1)
+Gui.Form.cmdBrowseMainAcct.Create(Button)
+Gui.Form.cmdBrowseMainAcct.Size(720,375)
+Gui.Form.cmdBrowseMainAcct.Position(2355,420)
+Gui.Form.cmdBrowseMainAcct.Caption("^")
+Gui.Form.cmdBrowseMainAcct.Event(Click,cmdBrowseMainAcct_Click)
+Gui.Form.cmdBrowseMainAcct.TabStop(True)
+Gui.Form.cmdBrowseMainAcct.TabIndex(2)
+Gui.Form.lbl2.Create(Label,"Gains Account",True,1290,255,0,3525,180,True,0,"Arial",8,-2147483633,0)
+Gui.Form.txtGainsAcct.Create(TextBox,"",True,2100,300,0,3540,465,True,0,"Arial",8,-2147483643,2)
+Gui.Form.txtGainsAcct.MaxLength(15)
+Gui.Form.txtGainsAcct.TabStop(True)
+Gui.Form.txtGainsAcct.TabIndex(3)
+Gui.Form.cmdBrowseGainsAcct.Create(Button)
+Gui.Form.cmdBrowseGainsAcct.Size(720,375)
+Gui.Form.cmdBrowseGainsAcct.Position(5715,420)
+Gui.Form.cmdBrowseGainsAcct.Caption("^")
+Gui.Form.cmdBrowseGainsAcct.Event(Click,cmdBrowseGainsAcct_Click)
+Gui.Form.cmdBrowseGainsAcct.TabStop(True)
+Gui.Form.cmdBrowseGainsAcct.TabIndex(4)
+Gui.Form.lbl3.Create(Label,"Losses Account",True,1530,255,0,6765,180,True,0,"Arial",8,-2147483633,0)
+Gui.Form.txtLossesAcct.Create(TextBox,"",True,2100,300,0,6825,465,True,0,"Arial",8,-2147483643,2)
+Gui.Form.txtLossesAcct.MaxLength(15)
+Gui.Form.txtLossesAcct.TabStop(True)
+Gui.Form.txtLossesAcct.TabIndex(5)
+Gui.Form.cmdBrowseLossesAcct.Create(Button)
+Gui.Form.cmdBrowseLossesAcct.Size(720,375)
+Gui.Form.cmdBrowseLossesAcct.Position(9015,420)
+Gui.Form.cmdBrowseLossesAcct.Caption("^")
+Gui.Form.cmdBrowseLossesAcct.Event(Click,cmdBrowseLossesAcct_Click)
+Gui.Form.cmdBrowseLossesAcct.TabStop(True)
+Gui.Form.cmdBrowseLossesAcct.TabIndex(6)
+Gui.Form.cmdSave.Create(Button)
+Gui.Form.cmdSave.Size(855,375)
+Gui.Form.cmdSave.Position(120,1350)
+Gui.Form.cmdSave.Caption("Save")
+Gui.Form.cmdSave.Event(Click,cmdSave_Click)
+Gui.Form.cmdSave.TabStop(True)
+Gui.Form.cmdSave.TabIndex(8)
+Gui.Form.txtBatchPrefix.Create(TextBox,"",True,240,300,0,1635,930,True,0,"Arial",8,-2147483643,2)
+Gui.Form.txtBatchPrefix.MaxLength(1)
+Gui.Form.txtBatchPrefix.TabStop(True)
+Gui.Form.txtBatchPrefix.TabIndex(7)
+Gui.Form.lbl4.Create(Label,"Batch Prefix Letter",True,1500,255,0,135,1005,True,0,"Arial",8,-2147483633,0)
+Gui.Form.txtInvVarAcct.Create(TextBox,"",True,2100,300,0,6825,960,True,0,"Arial",8,-2147483643,2)
+Gui.Form.txtInvVarAcct.TabStop(True)
+Gui.Form.txtInvVarAcct.TabIndex(5)
+Gui.Form.txtInvVarAcct.MaxLength(15)
+Gui.Form.cmdBrowseInvVarAcct.Create(Button)
+Gui.Form.cmdBrowseInvVarAcct.Size(720,375)
+Gui.Form.cmdBrowseInvVarAcct.Position(9015,930)
+Gui.Form.cmdBrowseInvVarAcct.TabStop(True)
+Gui.Form.cmdBrowseInvVarAcct.TabIndex(6)
+Gui.Form.cmdBrowseInvVarAcct.Caption("^")
+Gui.Form.cmdBrowseInvVarAcct.Event(Click,cmdBrowseInvVarAcct_Click)
+Gui.Form.lbl5.Create(Label,"Exchange Variance Inventory Account",True,2925,255,0,3765,1050,True,0,"Arial",8,-2147483633,0)
+Program.Sub.ScreenSU.End
+
+Program.Sub.Preflight.Start
+Program.Sub.Preflight.End
+
+Program.Sub.Main.Start
+'BN, Feb 2019
+'This program will maintain the options for project 5457 - Gains/Losses Reclassification
+'Ensure that there are three exchange accounts set up in Global Shop
+'A ? Main Exchange account where all the exchange entries are posted
+'B ? One Account for Exchange Gains
+'C ? One Account for Exchange Losses
+'Specs: Re-allocates all the dollars that posted in GL Account A during a specific period and then re-post the Debit (positive values) to Account C and the Credit (negative values) to Account B .
+
+'To setup account A:	
+	'a.	System Support > Administration > Standard > Inventory Accounting Options > Purchasing Tab > Exchange variance account
+	'b.	System Support > Administration > Standard > General Ledger 
+	'c.	System Support > Administration > Standard > Accounts Receivable Table Maintenance > Exchange Variance
+
+
+'We use this script to maintain the Account number A, B, and C, as well as a Prefix Letter for Batch Number auto generation. If the batch has reached the ceilling like H9999, there will be a message
+'popped up asking user to select another Prefix Letter.
+
+f.Intrinsic.Control.Try
+	v.Local.sError.Declare
+	v.Local.bInSecurityGroup.Declare
+	
+	'To run this program, user has to be in security group named XCHGACCT
+	f.Global.Security.IsInGroup(v.Caller.User,"XCHGACCT",V.Caller.CompanyCode,V.Local.bInSecurityGroup)
+	'For testing purpose
+	'v.Local.bInSecurityGroup.Set(True)
+	F.Intrinsic.Control.If(V.Local.bInSecurityGroup.Not)
+		F.Intrinsic.UI.Msgbox("You are not allowed to use this program","Attention")
+		f.Intrinsic.Control.CallSub("Unload")
+	F.Intrinsic.Control.EndIf
+			
+	f.ODBC.Connection!conx.OpenCompanyConnection
+	F.Intrinsic.Control.CallSub("Get_Options")
+	Gui.Form..Show
+	
+
+F.Intrinsic.Control.Catch
+	F.Intrinsic.String.Build("Project: {0}{1}Subroutine: {2}{1}Subroutine called from:{6}{1}Error Occurred: {3}{1}Description: {4}{1}GAB Version: {5}",V.Ambient.ScriptPath,V.Ambient.Newline,V.Ambient.CurrentSubroutine,V.Ambient.ErrorNumber,V.Ambient.ErrorDescription,V.Ambient.GABVersion,v.Ambient.SubroutineCalledFrom,V.Local.sError)
+	F.Intrinsic.UI.Msgbox(V.Local.sError)
+	f.Intrinsic.Control.CallSub("Unload")
+F.Intrinsic.Control.EndTry
+Program.Sub.Main.End
+
+Program.Sub.UnLoad.Start
+f.Intrinsic.Control.Try
+	v.Local.sError.Declare
+
+	F.Intrinsic.Control.If(V.ODBC.conx.State,=,1)
+		F.ODBC.Connection!conx.close
+	F.Intrinsic.Control.EndIf
+	
+	f.Intrinsic.Control.End
+
+F.Intrinsic.Control.Catch
+	F.Intrinsic.String.Build("Project: {0}{1}Subroutine: {2}{1}Subroutine called from:{6}{1}Error Occurred: {3}{1}Description: {4}{1}GAB Version: {5}",V.Ambient.ScriptPath,V.Ambient.Newline,V.Ambient.CurrentSubroutine,V.Ambient.ErrorNumber,V.Ambient.ErrorDescription,V.Ambient.GABVersion,v.Ambient.SubroutineCalledFrom,V.Local.sError)
+	F.Intrinsic.UI.Msgbox(V.Local.sError)
+	F.Intrinsic.Control.End	
+F.Intrinsic.Control.EndTry
+Program.Sub.UnLoad.End
+
+Program.Sub.Form_UnLoad.Start
+f.Intrinsic.Control.CallSub	("Unload")
+Program.Sub.Form_UnLoad.End
+
+Program.Sub.cmdBrowseMainAcct_Click.Start
+f.Intrinsic.Control.CallSub("Browser_GL_Number","sControl","txtExchangeVarAcct")
+Program.Sub.cmdBrowseMainAcct_Click.End
+
+Program.Sub.cmdBrowseGainsAcct_Click.Start
+f.Intrinsic.Control.CallSub("Browser_GL_Number","sControl","txtGainsAcct")
+Program.Sub.cmdBrowseGainsAcct_Click.End
+
+Program.Sub.cmdBrowseLossesAcct_Click.Start
+f.Intrinsic.Control.CallSub("Browser_GL_Number","sControl","txtLossesAcct")
+Program.Sub.cmdBrowseLossesAcct_Click.End
+
+Program.Sub.cmdBrowseInvVarAcct_Click.Start
+f.Intrinsic.Control.CallSub("Browser_GL_Number","sControl","txtInvVarAcct")
+Program.Sub.cmdBrowseInvVarAcct_Click.End
+
+Program.Sub.Browser_GL_Number.Start
+'Browse an account in GL chart
+f.Intrinsic.Control.Try
+	v.Local.sError.Declare
+	v.Local.sRet.Declare
+	
+	F.Intrinsic.UI.SetBrowserHotTypeAhead(true)
+	F.Intrinsic.UI.CommonBrowser(6000,"",v.Local.sRet)
+	
+	'Check if you choose any record from the result
+	F.Intrinsic.Control.If(Variable.Local.sRet.IsCancel)
+		F.Intrinsic.UI.Msgbox("You select NOTHING!")
+	F.Intrinsic.Control.Else
+		F.Intrinsic.String.Split(Variable.Local.sRet,"*!*",Variable.Local.sRet)
+		gui.Form.[v.Args.sControl].Text(v.Local.sRet(0).Trim)
+	F.Intrinsic.Control.EndIf
+	
+F.Intrinsic.Control.Catch
+	F.Intrinsic.String.Build("Project: {0}{1}Current Subroutine: {2}{1}Subroutine Called From: {3}{1}Error Occurred {4}{1}Error description: {5}{1}GAB Version: {6}",V.Ambient.ScriptPath,V.Ambient.Newline,V.Ambient.CurrentSubroutine,v.Ambient.SubroutineCalledFrom,V.Ambient.ErrorNumber,V.Ambient.ErrorDescription,V.Ambient.GABVersion,V.Local.sError)
+	F.Intrinsic.UI.Msgbox(V.Local.sError)
+	f.Intrinsic.Control.CallSub("Unload")
+F.Intrinsic.Control.EndTry
+Program.Sub.Browser_GL_Number.End
+
+Program.Sub.Get_Options.Start
+f.Intrinsic.Control.Try
+	v.Local.sError.Declare
+	v.Local.sRet.Declare
+	
+	'ExchangeVarAcct
+	f.ODBC.Connection!conx.ExecuteAndReturn("Select Top 1 OptionValue from GCG_5457_Maint where OptionName = 'ExchangeVarAccount'",v.Local.sRet)
+	gui.Form.txtExchangeVarAcct.Text(v.Local.sRet.Trim)
+	'GainsAcct
+	f.ODBC.Connection!conx.ExecuteAndReturn("Select Top 1 OptionValue from GCG_5457_Maint where OptionName = 'GainsAccount'",v.Local.sRet)
+	gui.Form.txtGainsAcct.Text(v.Local.sRet.Trim)
+	'LossesAcct
+	f.ODBC.Connection!conx.ExecuteAndReturn("Select Top 1 OptionValue from GCG_5457_Maint where OptionName = 'LossesAccount'",v.Local.sRet)
+	gui.Form.txtLossesAcct.Text(v.Local.sRet.Trim)
+	'BatchNumberPrefix
+	f.ODBC.Connection!conx.ExecuteAndReturn("Select Top 1 OptionValue from GCG_5457_Maint where OptionName = 'BatchNumberPrefix'",v.Local.sRet)
+	gui.Form.txtBatchPrefix.Text(v.Local.sRet.Trim)	
+	'InvVarAccount
+	f.ODBC.Connection!conx.ExecuteAndReturn("Select Top 1 OptionValue from GCG_5457_Maint where OptionName = 'InvVarAccount'",v.Local.sRet)
+	gui.Form.txtInvVarAcct.Text(v.Local.sRet.Trim)	
+	
+	
+F.Intrinsic.Control.Catch
+	F.Intrinsic.String.Build("Project: {0}{1}Current Subroutine: {2}{1}Subroutine Called From: {3}{1}Error Occurred {4}{1}Error description: {5}{1}GAB Version: {6}",V.Ambient.ScriptPath,V.Ambient.Newline,V.Ambient.CurrentSubroutine,v.Ambient.SubroutineCalledFrom,V.Ambient.ErrorNumber,V.Ambient.ErrorDescription,V.Ambient.GABVersion,V.Local.sError)
+	F.Intrinsic.UI.Msgbox(V.Local.sError)
+	f.Intrinsic.Control.CallSub("Unload")
+F.Intrinsic.Control.EndTry	
+Program.Sub.Get_Options.End
+
+Program.Sub.cmdSave_Click.Start
+f.Intrinsic.Control.Try
+	v.Local.sError.Declare
+	v.Local.sRet.Declare
+	v.Local.sSQL.Declare	
+	
+	'Create Option table
+	f.Intrinsic.Control.If(v.DataTable.Opt.Exists)
+		f.Data.DataTable.Close("Opt")		
+	f.Intrinsic.Control.EndIf
+	f.Data.DataTable.Create("Opt",True)
+	f.Data.DataTable.AddColumn("Opt","OptionName","String")
+	f.Data.DataTable.AddColumn("Opt","OptionValue","String")
+	
+	'Validate accounts
+	f.Intrinsic.Control.CallSub("Validate_Account","sGLNumber",v.Screen.Form!txtExchangeVarAcct.Text.Trim)
+	f.Intrinsic.Control.If(v.Args.bExist.Not)
+		f.Intrinsic.UI.Msgbox("Exchange Account is not valid","Attention")
+		f.Intrinsic.Control.ExitSub
+	f.Intrinsic.Control.EndIf
+	f.Intrinsic.Control.CallSub("Validate_Account","sGLNumber",v.Screen.Form!txtGainsAcct.Text.Trim)
+	f.Intrinsic.Control.If(v.Args.bExist.Not)
+		f.Intrinsic.UI.Msgbox("Gains Account is not valid","Attention")
+		f.Intrinsic.Control.ExitSub
+	f.Intrinsic.Control.EndIf
+	f.Intrinsic.Control.CallSub("Validate_Account","sGLNumber",v.Screen.Form!txtLossesAcct.Text.Trim)
+	f.Intrinsic.Control.If(v.Args.bExist.Not)
+		f.Intrinsic.UI.Msgbox("Losses Account is not valid","Attention")
+		f.Intrinsic.Control.ExitSub
+	f.Intrinsic.Control.EndIf
+	f.Intrinsic.Control.CallSub("Validate_Account","sGLNumber",v.Screen.Form!txtInvVarAcct.Text.Trim)
+	f.Intrinsic.Control.If(v.Args.bExist.Not)
+		f.Intrinsic.UI.Msgbox("Losses Account is not valid","Attention")
+		f.Intrinsic.Control.ExitSub
+	f.Intrinsic.Control.EndIf
+	
+	f.Intrinsic.UI.InvokeWaitDialog("Saving...")
+	'Add Accounts and Prefix Letter
+	f.Data.DataTable.AddRow("Opt","OptionName","ExchangeVarAccount","OptionValue",v.Screen.Form!txtExchangeVarAcct.Text.Trim)
+	f.Data.DataTable.AddRow("Opt","OptionName","GainsAccount","OptionValue",v.Screen.Form!txtGainsAcct.Text.Trim)
+	f.Data.DataTable.AddRow("Opt","OptionName","LossesAccount","OptionValue",v.Screen.Form!txtLossesAcct.Text.Trim)
+	f.Data.DataTable.AddRow("Opt","OptionName","BatchNumberPrefix","OptionValue",v.Screen.Form!txtBatchPrefix.Text.Trim)
+	f.Data.DataTable.AddRow("Opt","OptionName","InvVarAccount","OptionValue",v.Screen.Form!txtInvVarAcct.Text.Trim)
+	
+	'Save Options
+	f.Data.DataTable.SaveToDB("Opt","conx","GCG_5457_Maint","OptionName*!*OptionName",256)
+	
+	f.Intrinsic.UI.CloseWaitDialog
+	
+F.Intrinsic.Control.Catch
+	F.Intrinsic.String.Build("Project: {0}{1}Current Subroutine: {2}{1}Subroutine Called From: {3}{1}Error Occurred {4}{1}Error description: {5}{1}GAB Version: {6}",V.Ambient.ScriptPath,V.Ambient.Newline,V.Ambient.CurrentSubroutine,v.Ambient.SubroutineCalledFrom,V.Ambient.ErrorNumber,V.Ambient.ErrorDescription,V.Ambient.GABVersion,V.Local.sError)
+	F.Intrinsic.UI.Msgbox(V.Local.sError)
+	f.Intrinsic.Control.CallSub("Unload")
+F.Intrinsic.Control.EndTry	
+
+Program.Sub.cmdSave_Click.End
+
+Program.Sub.Validate_Account.Start
+'Check if account is valid
+f.Intrinsic.Control.Try
+	v.Local.sError.Declare
+	v.Local.sRet.Declare
+	v.Local.sSQL.Declare
+	v.Local.bExist.Declare
+	
+	'Pass a GL number and check if it exists	
+	f.Intrinsic.String.Build("Select * from GL_Master where GL_Account = '{0}'",v.Args.sGLNumber,v.Local.sSQL)
+	f.ODBC.Connection!conx.ExecuteAndReturn(v.Local.sSQL,v.Local.sRet)
+	f.Intrinsic.Control.If(v.Local.sRet,=,"")
+		v.Local.bExist.Set(False)
+	f.Intrinsic.Control.Else
+		v.Local.bExist.Set(True)
+	f.Intrinsic.Control.EndIf
+	f.Intrinsic.Variable.AddRV("bExist",v.Local.bExist)
+	
+F.Intrinsic.Control.Catch
+	F.Intrinsic.String.Build("Project: {0}{1}Current Subroutine: {2}{1}Subroutine Called From: {3}{1}Error Occurred {4}{1}Error description: {5}{1}GAB Version: {6}",V.Ambient.ScriptPath,V.Ambient.Newline,V.Ambient.CurrentSubroutine,v.Ambient.SubroutineCalledFrom,V.Ambient.ErrorNumber,V.Ambient.ErrorDescription,V.Ambient.GABVersion,V.Local.sError)
+	F.Intrinsic.UI.Msgbox(V.Local.sError)
+	f.Intrinsic.Control.CallSub("Unload")
+F.Intrinsic.Control.EndTry	
+Program.Sub.Validate_Account.End
+
+
+
